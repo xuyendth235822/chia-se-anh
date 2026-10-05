@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGMap - Chia sẻ Ảnh</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <!-- Firebase SDK v8 (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    <!-- Thư viện tạo QR Code cục bộ (Không cần Internet) -->
+    <script src="qrcode.min.js?v=4"></script>
+</head>
+
+<body class="bg-gray-50 font-sans text-gray-800">
+    <!-- GIAO DIỆN ĐĂNG NHẬP -->
+    <div id="login-container"
+        class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4 relative z-50">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md relative overflow-hidden">
+            <!-- Trang trí nền -->
+            <div
+                class="absolute -top-10 -right-10 w-32 h-32 bg-blue-100 rounded-full mix-blend-multiply filter blur-xl opacity-70">
+            </div>
+            <div
+                class="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-100 rounded-full mix-blend-multiply filter blur-xl opacity-70">
+            </div>
+
+            <div class="relative z-10">
+                <div class="text-center mb-8">
+                    <div
+                        class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
+                        <i class="fas fa-camera-retro text-white text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-800">AGMap Studio</h2>
+                    <p class="text-gray-500 text-sm mt-2">Vui lòng đăng nhập để tiếp tục</p>
+                </div>
+
+                <div id="error-msg"
+                    class="hidden bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 border border-red-100 flex items-start gap-2">
+                    <i class="fas fa-exclamation-circle mt-0.5"></i>
+                    <span id="error-text"></span>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fas fa-envelope text-gray-400"></i>
+                            </div>
+                            <input type="email" id="email"
+                                class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none"
+                                placeholder="nguyenvana@gmail.com">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fas fa-lock text-gray-400"></i>
+                            </div>
+                            <input type="password" id="password"
+                                class="w-full pl-10 pr-10 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none"
+                                placeholder="••••••••">
+                            <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-600 transition-colors">
+                                <i class="fas fa-eye" id="toggle-password-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 grid grid-cols-2 gap-4">
+                        <button onclick="handleAuth('login')"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl transition-colors shadow-md shadow-blue-200 flex justify-center items-center gap-2">
+                            <i class="fas fa-sign-in-alt"></i> Đăng nhập
+                        </button>
+                        <button onclick="handleAuth('register')"
+                            class="w-full bg-white hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-xl transition-colors border border-gray-200 flex justify-center items-center gap-2">
+                            <i class="fas fa-user-plus"></i> Đăng ký
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ỨNG DỤNG CHÍNH -->
+    <div id="main-app" class="min-h-screen pb-10 hidden">
+        <!-- Thanh Nav -->
+        <nav
+            class="px-6 py-4 bg-white/90 backdrop-blur-md shadow-sm border-b border-gray-100 flex justify-between items-center sticky top-0 z-40">
+            <span class="font-bold text-2xl text-blue-600 flex items-center gap-2 cursor-pointer"
+                onclick="viewRecycleBin(false)">
+                <i class="fas fa-camera-retro"></i> AGMap Studio
+            </span>
+            <div class="flex items-center gap-4 sm:gap-6">
+                <!-- Giao diện Hồ sơ tài khoản (User Profile) -->
+                <div class="flex items-center gap-3 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-full">
+                    <div class="w-7 h-7 bg-blue-500 rounded-full text-white flex items-center justify-center font-bold text-xs" id="profile-avatar">A</div>
+                    <span class="text-sm font-medium text-gray-700 max-w-[120px] truncate" id="profile-email">email@...</span>
+                    <!-- Nút Đăng xuất thu gọn -->
+                    <button onclick="handleLogout()" title="Đăng xuất"
+                        class="hover:text-red-500 text-gray-400 ml-1 flex items-center justify-center transition-colors">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+                <!-- Nút Thùng Rác (Recycle Bin) -->
+                <button id="recycle-bin-btn" onclick="viewRecycleBin(true)"
+                    class="hover:bg-red-50 text-red-500 font-medium border border-red-100 px-4 py-1.5 rounded-full text-sm flex items-center gap-2 transition-colors">
+                    <i class="fas fa-trash-alt"></i> Thùng rác
+                </button>
+                <!-- Nút hiển thị Dashboard Thống kê -->
+                <button onclick="openDashboard()" id="view-counter"
+                    class="hover:bg-orange-100 text-orange-600 font-medium bg-orange-50 border border-orange-100 px-4 py-1.5 rounded-full text-sm flex items-center gap-2 transition-colors cursor-pointer"
+                    title="Nhấn để xem Báo cáo thống kê">
+                    <i class="fas fa-chart-pie"></i> Tổng HR: <span id="total-activity-num" class="font-bold">0</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 mt-8">
+            <!-- Vùng tải ảnh & Thông tin bài đăng -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm mb-8 border border-gray-200 hover:border-blue-200 transition-all">
+                <div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-lg">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-gray-800 font-bold text-base">Đăng tải khoảnh khắc</h3>
+                            <p class="text-gray-400 text-xs">Ghi chú địa điểm chụp & chủ đề để mọi người dễ dàng tìm kiếm</p>
+                        </div>
+                    </div>
+                    <span class="hidden sm:inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full font-medium border border-blue-100">
+                        <i class="fas fa-map-marked-alt"></i> Bản đồ địa điểm
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <!-- Ô nhập địa điểm (Bắt buộc) -->
+                    <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1.5">
+                            <i class="fas fa-map-marker-alt text-red-500 mr-1"></i>Địa điểm chụp ảnh <span class="text-red-500 font-bold">*</span>:
+                        </label>
+                        <div class="relative">
+                            <input type="text" id="upload-location"
+                                placeholder="Nhập địa điểm (ví dụ: Núi Cấm, Núi Sam, Chùa Bà...)"
+                                class="w-full text-sm py-2.5 pl-3 pr-8 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
+                            <i class="fas fa-location-dot absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                        </div>
+                    </div>
+
+                    <!-- Ô nhập caption / chú thích ảnh -->
+                    <div>
+                        <label class="text-xs font-semibold text-gray-700 block mb-1.5">
+                            <i class="fas fa-pen-nib text-blue-500 mr-1"></i>Ghi chú / Caption bức ảnh:
+                        </label>
+                        <div class="relative">
+                            <input type="text" id="upload-caption"
+                                placeholder="Cảm nghĩ, kỷ niệm hoặc ghi chú về bức ảnh..."
+                                class="w-full text-sm py-2.5 pl-3 pr-8 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
+                            <i class="fas fa-comment-dots absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+                    <!-- Chủ đề phân loại -->
+                    <div class="sm:col-span-5">
+                        <label class="text-xs font-semibold text-gray-700 block mb-1.5">
+                            <i class="fas fa-layer-group text-indigo-500 mr-1"></i>Chủ đề ảnh:
+                        </label>
+                        <select id="upload-tag"
+                            class="w-full text-sm py-2.5 px-3 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 bg-white cursor-pointer font-medium text-gray-700">
+                            <option value="Danh Lam Thắng Cảnh">🏞️ Danh Lam Thắng Cảnh</option>
+                            <option value="Di Tích Lịch Sử">🏛️ Di Tích Lịch Sử</option>
+                            <option value="Phong Cảnh">🌄 Phong Cảnh</option>
+                            <option value="Khác">📂 Khác</option>
+                        </select>
+                    </div>
+
+                    <!-- Quyền Riêng Tư (Công Khai) -->
+                    <div class="sm:col-span-3 flex items-center h-10 pb-0.5">
+                        <label class="flex items-center cursor-pointer gap-2 select-none group" title="Cho phép hiển thị trên tab Cộng đồng">
+                            <input type="checkbox" id="upload-public" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer">
+                            <span class="text-sm text-gray-700 font-medium group-hover:text-blue-600 transition-colors">🌐 Public</span>
+                        </label>
+                    </div>
+
+                    <!-- Nút chọn ảnh và đăng -->
+                    <div class="sm:col-span-4">
+                        <button id="upload-btn" onclick="startPhotoUploadProcess()"
+                            class="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-medium py-2.5 px-4 rounded-xl transition-all shadow-md shadow-blue-200 flex justify-center items-center gap-2 text-sm cursor-pointer">
+                            <i class="fas fa-cloud-upload-alt text-base"></i> Chọn ảnh & Đăng tải
+                        </button>
+                    </div>
+                </div>
+
+                <input type="file" id="photo-input" class="hidden" accept="image/*" multiple>
+            </div>
+
+            <!-- Tiêu đề Gallery, Tìm Kiếm và Sắp Xếp -->
+            <div class="flex flex-col mb-6 border-b border-gray-200 pb-4 gap-4">
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <h3 id="gallery-title" class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-images text-blue-500"></i> Thư viện ảnh
+                        <span id="total-photos"
+                            class="text-sm font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full ml-2">0</span>
+                    </h3>
+                    
+                    <!-- Tabs Chế độ xem -->
+                    <div class="flex bg-gray-100 p-1 rounded-xl">
+                        <button id="tab-my-photos" onclick="switchGalleryTab('my_photos')" class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-white text-blue-600 shadow-sm transition-all flex items-center gap-2">
+                            <i class="fas fa-user"></i> Cá nhân
+                        </button>
+                        <button id="tab-community" onclick="switchGalleryTab('community')" class="px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-700 transition-all flex items-center gap-2">
+                            <i class="fas fa-globe"></i> Cộng đồng
+                        </button>
+                    </div>
+
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <!-- Nút Sắp xếp -->
+                        <select id="sort-select" onchange="runGalleryLogic()"
+                            class="w-36 text-sm py-2 px-3 border border-gray-200 rounded-xl focus:outline-none bg-white font-medium text-gray-700">
+                            <option value="newest">🆕 Mới nhất</option>
+                            <option value="views">👁️ Lượt xem</option>
+                            <option value="hearts">💖 Yêu thích</option>
+                            <option value="size">⚖️ Dung lượng</option>
+                        </select>
+                        <!-- Thanh tìm kiếm theo địa điểm / từ khóa -->
+                        <div class="relative w-full sm:w-72">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fas fa-search text-gray-400"></i>
+                            </div>
+                            <input type="text" id="search-input" onkeyup="runGalleryLogic()"
+                                placeholder="Tìm địa điểm (Núi Cấm), tên..."
+                                class="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 transition-all text-sm">
+                            <button id="clear-search-btn" onclick="clearSearchInput()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Khu vực Lọc Theo Chủ Đề (Tag) -->
+                <div id="tags-filter-container" class="flex gap-2 flex-wrap items-center">
+                    <span class="text-xs text-gray-500 font-semibold mr-1 flex items-center gap-1">
+                        <i class="fas fa-filter text-blue-500"></i> Lọc chủ đề:
+                    </span>
+                    <button onclick="setFilterTag('Tất Cả')"
+                        class="tag-btn bg-blue-500 text-white px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors border border-blue-500 shadow-sm"
+                        data-tag="Tất Cả">Tất Cả</button>
+                    <button onclick="setFilterTag('Danh Lam Thắng Cảnh')"
+                        class="tag-btn bg-white hover:bg-gray-50 text-gray-600 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors border border-gray-200"
+                        data-tag="Danh Lam Thắng Cảnh">🏞️ Danh Lam Thắng Cảnh</button>
+                    <button onclick="setFilterTag('Di Tích Lịch Sử')"
+                        class="tag-btn bg-white hover:bg-gray-50 text-gray-600 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors border border-gray-200"
+                        data-tag="Di Tích Lịch Sử">🏛️ Di Tích Lịch Sử</button>
+                    <button onclick="setFilterTag('Phong Cảnh')"
+                        class="tag-btn bg-white hover:bg-gray-50 text-gray-600 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors border border-gray-200"
+                        data-tag="Phong Cảnh">🌄 Phong Cảnh</button>
+                    <button onclick="setFilterTag('Khác')"
+                        class="tag-btn bg-white hover:bg-gray-50 text-gray-600 px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-colors border border-gray-200"
+                        data-tag="Khác">📂 Khác</button>
+                </div>
+            </div>
+
+            <!-- Lưới hiển thị các thẻ ảnh -->
+            <div id="gallery" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Sẽ được vẽ bằng Javascript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL XEM CẬN CẢNH & CHỈNH SỬA BỘ LỌC (Photo Filters) -->
+    <div id="view-modal"
+        class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 transition-opacity">
+        <button onclick="closeViewModal()"
+            class="absolute top-4 right-4 text-white hover:text-red-500 bg-gray-800 hover:bg-gray-700 rounded-full w-12 h-12 flex items-center justify-center text-2xl z-50 transition-colors">
+            <i class="fas fa-times"></i>
+        </button>
+
+        <div class="flex flex-col items-center justify-center w-full max-h-screen p-8">
+            <img id="full-view-img" src=""
+                class="max-w-full max-h-[70vh] object-contain rounded shadow-2xl transition-all duration-300">
+
+            <!-- Thông tin địa điểm & chú thích trong modal -->
+            <div class="mt-3 flex flex-wrap items-center justify-center gap-3">
+                <div id="view-location-box" class="flex items-center gap-2 text-white font-semibold text-sm bg-gray-800/90 backdrop-blur px-4 py-1.5 rounded-full border border-gray-700 shadow-md">
+                    <i class="fas fa-map-marker-alt text-red-400"></i>
+                    <span id="view-location">Chưa ghi chú địa điểm</span>
+                </div>
+                <span id="view-tag" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-full font-medium shadow-md">
+                    Chủ đề
+                </span>
+            </div>
+            <p id="view-caption" class="text-gray-300 text-xs mt-2 italic max-w-xl text-center"></p>
+
+            <!-- Thống kê ảnh -->
+            <div id="view-stats-container"
+                class="mt-3 bg-gray-800/80 backdrop-blur px-6 py-2 rounded-full flex items-center gap-6 text-gray-300 text-sm font-medium shadow-lg border border-gray-700">
+                <span title="Lượt thả tim" class="flex items-center gap-2"><i class="fas fa-heart text-pink-500"></i>
+                    <span id="view-stat-hearts">0</span></span>
+                <span title="Lượt xem" class="flex items-center gap-2"><i class="fas fa-eye text-blue-400"></i> <span
+                        id="view-stat-views">0</span></span>
+                <span title="Lượt chia sẻ" class="flex items-center gap-2"><i class="fas fa-share text-green-400"></i>
+                    <span id="view-stat-shares">0</span></span>
+                <span title="Lượt tải xuống" class="flex items-center gap-2"><i
+                        class="fas fa-download text-orange-400"></i> <span id="view-stat-downloads">0</span></span>
+            </div>
+
+            <!-- Chức năng Photo Filters -->
+            <div class="mt-3 bg-gray-800/80 backdrop-blur px-6 py-2.5 rounded-2xl flex items-center gap-4">
+                <span class="text-gray-300 text-sm font-medium mr-2">Bộ lọc màu:</span>
+                <button onclick="applyFilter('none')"
+                    class="text-white hover:text-blue-400 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition-colors">Gốc</button>
+                <button onclick="applyFilter('grayscale(100%)')"
+                    class="text-white hover:text-blue-400 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition-colors">Trắng
+                    Đen</button>
+                <button onclick="applyFilter('brightness(150%) saturate(150%)')"
+                    class="text-white hover:text-blue-400 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition-colors">Sáng
+                    Rực</button>
+                <button onclick="applyFilter('sepia(100%)')"
+                    class="text-white hover:text-blue-400 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition-colors">Hoài
+                    Cổ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DASHBOARD ANALYTICS (Báo cáo Thống kê) -->
+    <div id="dashboard-modal"
+        class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white flex justify-between items-center">
+                <h3 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-chart-pie"></i> Báo Cáo Thống Kê
+                </h3>
+                <button onclick="closeDashboard()"
+                    class="text-white/70 hover:text-white hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 gap-4">
+                    <!-- Tổng dung lượng -->
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center gap-4">
+                        <div
+                            class="bg-blue-500 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Tổng dung lượng đã dùng</p>
+                            <p id="dash-storage" class="text-xl font-bold text-gray-800">0 KB</p>
+                        </div>
+                    </div>
+                    <!-- Ảnh xem nhiều nhất -->
+                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100 flex items-center gap-4">
+                        <div
+                            class="bg-orange-500 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="overflow-hidden">
+                            <p class="text-sm text-gray-500">Ảnh được xem/tương tác nhiều nhất</p>
+                            <p id="dash-top-img" class="text-lg font-bold text-gray-800 truncate">Chưa có dữ liệu</p>
+                        </div>
+                    </div>
+                    <!-- Thời gian hoạt động -->
+                    <div class="bg-green-50 p-4 rounded-xl border border-green-100 flex items-center gap-4">
+                        <div
+                            class="bg-green-500 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl shadow-inner">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Thời gian hoạt động của hệ thống</p>
+                            <p id="dash-uptime" class="text-xl font-bold text-gray-800">0 phút</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HIỂN THỊ LINK CHIA SẺ -->
+    <div id="share-modal"
+        class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+        <div
+            class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md transform transition-all border border-gray-100">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                Chia sẻ hình ảnh
+                <button onclick="closeShareModal()"
+                    class="text-gray-400 hover:text-red-500 hover:bg-red-50 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </h3>
+            <p class="text-sm text-gray-600 mb-5">Sao chép liên kết dưới đây để gửi cho bạn bè:</p>
+            <div
+                class="flex gap-2 bg-gray-50 p-1 rounded-xl border border-gray-200 mb-5 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all">
+                <div class="flex items-center justify-center pl-3">
+                    <i class="fas fa-link text-gray-400"></i>
+                </div>
+                <input type="text" id="share-link"
+                    class="w-full py-3 px-2 bg-transparent text-sm text-gray-800 font-medium outline-none" readonly>
+            </div>
+            <button onclick="copyShareLink(event)"
+                class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-blue-700 shadow-md shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                <i class="fas fa-copy"></i> Sao chép liên kết
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL HIỂN THỊ MÃ QR -->
+    <div id="qr-modal"
+        class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+        <div
+            class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm transform transition-all border border-gray-100 flex flex-col items-center">
+            <h3 class="text-xl font-bold text-gray-800 mb-2 flex justify-between items-center w-full">
+                Mã QR Chia Sẻ
+                <button onclick="closeQrModal()"
+                    class="text-gray-400 hover:text-red-500 hover:bg-red-50 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </h3>
+            <p class="text-sm text-gray-500 mb-6 text-center">Quét mã bằng Camera điện thoại để xem ảnh này</p>
+            <div class="bg-gray-50 border border-gray-200 p-4 rounded-2xl shadow-inner min-h-[250px] flex items-center justify-center">
+                <div id="qrcode-container" class="opacity-0 transition-opacity duration-500"></div>
+            </div>
+            <p id="qr-status" class="text-xs text-orange-500 mt-4 animate-pulse">Đang tạo mã QR ảo...</p>
+        </div>
+    </div>
+
+    <script>
+        // === KHỞI TẠO DỮ LIỆU TẠM (State) QUẢN LÝ APP ===
+        window.appData = {
+            images: [],
+            views: 0,
+            startTime: Date.now(), // Để tính Uptime trong Dashboard
+            currentTab: 'my_photos' // Tab mặc định khi mở app
+        };
+    </script>
+
+    <script src="storage.js?v=4"></script> <!-- Chức năng Lưu trữ IndexedDB (Mới) -->
+
+    <script>
+
+        function showApp(email) {
+            // Lưu email người dùng hiện tại để phân tách dữ liệu
+            window.appData.currentUser = email;
+            
+            // Cập nhật giao diện Hồ sơ (Profile)
+            document.getElementById('profile-email').innerText = email;
+            document.getElementById('profile-avatar').innerText = email.charAt(0).toUpperCase();
+
+            // Ẩn vùng đăng nhập, hiện ứng dụng chính
+            document.getElementById('login-container').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+
+            // Gọi đếm lượt truy cập 1 lần duy nhất
+            if (typeof incrementGlobalActive === 'function') incrementGlobalActive();
+
+            // Khởi tạo DB nếu có, sau đó vẽ giao diện
+            if (typeof initDB === 'function') {
+                initDB(() => {
+                    if (typeof runGalleryLogic === 'function') runGalleryLogic();
+                });
+            } else {
+                if (typeof runGalleryLogic === 'function') runGalleryLogic();
+            }
+        }
+
+        // Chuyển đổi giữa 2 tab: Ảnh Cá nhân / Ảnh Cộng đồng
+        function switchGalleryTab(tabName) {
+            window.appData.currentTab = tabName;
+            
+            const btnMyPhotos = document.getElementById('tab-my-photos');
+            const btnCommunity = document.getElementById('tab-community');
+            
+            if (tabName === 'my_photos') {
+                btnMyPhotos.className = "px-4 py-1.5 rounded-lg text-sm font-semibold bg-white text-blue-600 shadow-sm transition-all flex items-center gap-2";
+                btnCommunity.className = "px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-700 transition-all flex items-center gap-2";
+                // Ẩn/Hiện nút Thùng rác và Upload cho phù hợp
+                document.getElementById('recycle-bin-btn').style.display = 'flex';
+                // Tự động bỏ chọn Public khi ở tab Cá nhân
+                const publicCheckbox = document.getElementById('upload-public');
+                if(publicCheckbox) publicCheckbox.checked = false;
+            } else {
+                btnCommunity.className = "px-4 py-1.5 rounded-lg text-sm font-semibold bg-white text-blue-600 shadow-sm transition-all flex items-center gap-2";
+                btnMyPhotos.className = "px-4 py-1.5 rounded-lg text-sm font-semibold text-gray-500 hover:text-gray-700 transition-all flex items-center gap-2";
+                
+                // Ở tab cộng đồng, không có khái niệm thùng rác
+                if (window.isInRecycleBinMode && typeof viewRecycleBin === 'function') {
+                    viewRecycleBin(false);
+                }
+                window.isInRecycleBinMode = false;
+                document.getElementById('recycle-bin-btn').style.display = 'none';
+                // Tự động chọn Public khi ở tab Cộng đồng
+                const publicCheckbox = document.getElementById('upload-public');
+                if(publicCheckbox) publicCheckbox.checked = true;
+            }
+            
+            // Khi đổi tab, tải lại dữ liệu từ Firestore
+            if (typeof loadImages === 'function') {
+                loadImages(() => {
+                    if (typeof runGalleryLogic === 'function') runGalleryLogic();
+                });
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Xử lý bộ đếm giờ (Uptime) nội bộ
+            setInterval(() => {
+                const dashboard = document.getElementById('dashboard-modal');
+                if (dashboard && !dashboard.classList.contains('hidden')) {
+                    if (typeof updateUptimeDisplay === 'function') updateUptimeDisplay();
+                }
+            }, 1000);
+        });
+    </script>
+
+    <!-- TÁCH BIỆT CÁC CHỨC NĂNG RA TỪNG FILE ĐỂ DỄ QUẢN LÝ -->
+    <!-- Thư viện tạo QR Code hiện đại (QRious) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="auth.js?v=13"></script> <!-- Xác thực người dùng (Login/Register) -->
+    <script src="upload.js?v=14"></script> <!-- Tải ảnh lên và lưu dạng Base64 -->
+    <script src="gallery.js?v=13"></script> <!-- Vẽ Giao diện Lưới & Các chỉ số -->
+    <script src="share.js?v=12"></script> <!-- Lấy link Chia sẻ -->
+    <script src="view.js?v=13"></script> <!-- Mở ảnh Full màn hình -->
+    <script src="download.js?v=12"></script> <!-- Lưu ảnh về máy -->
+    <script src="chiase_dem.js?v=12"></script> <!-- Hệ thống điểm đếm lượt tương tác -->
+    <script src="search.js?v=13"></script> <!-- Chức năng 2: Tìm kiếm -->
+    <script src="filters.js?v=12"></script> <!-- Chức năng 1: Bộ lọc màu -->
+    <script src="dashboard.js?v=12"></script> <!-- Chức năng 3: Báo cáo thống kê -->
+    <script src="heart.js?v=12"></script> <!-- Chức năng Thả Tim & Bình Luận -->
+    <script src="qr.js?v=12"></script> <!-- Chức năng Tạo QR -->
+</body>
+
+</html>

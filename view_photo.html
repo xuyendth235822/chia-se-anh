@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGMap - Xem ảnh chia sẻ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div id="content-container" class="bg-white p-8 rounded-3xl shadow-2xl max-w-lg w-full text-center border border-gray-100">
+        <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <i class="fas fa-camera-retro text-4xl text-blue-500"></i>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">AGMap Studio</h1>
+        <p class="text-gray-500 mb-8" id="loading-text"><i class="fas fa-spinner fa-spin mr-2"></i> Đang tải dữ liệu hình ảnh...</p>
+        
+        <!-- Khung chứa ảnh sẽ được Javascript đổ vào -->
+        <div id="photo-display" class="hidden mb-6">
+            <img id="shared-image" src="" alt="Shared Photo" class="w-full rounded-2xl shadow-md border border-gray-100 object-contain max-h-[60vh]">
+            <div id="shared-location-box" class="hidden mt-4 inline-flex items-center gap-1.5 bg-red-50 text-red-600 border border-red-100 px-4 py-1.5 rounded-full font-bold text-sm">
+                <i class="fas fa-map-marker-alt"></i> <span id="shared-location"></span>
+            </div>
+            <div class="mt-2">
+                <span id="shared-tag" class="hidden inline-block text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-semibold"></span>
+            </div>
+            <p id="shared-caption" class="hidden text-sm text-gray-600 italic mt-3 bg-gray-50 p-3 rounded-xl border border-gray-100"></p>
+            <h2 id="shared-title" class="text-base font-bold text-gray-700 mt-3 truncate"></h2>
+            <p id="shared-meta" class="text-xs text-gray-400 mt-1"></p>
+        </div>
+
+        <div id="mockup-notice" class="hidden bg-orange-50 border border-orange-200 p-4 rounded-xl text-sm text-orange-700 text-left mb-8 flex gap-3 items-start">
+            <i class="fas fa-info-circle mt-0.5 text-lg"></i>
+            <div>
+                <strong>Không tìm thấy ảnh hoặc đang xem từ thiết bị khác:</strong><br>
+                Do ứng dụng đang lưu trữ ảnh trực tiếp trong bộ nhớ trình duyệt (Offline IndexedDB) thay vì máy chủ đám mây, nên hình ảnh thực tế chỉ tồn tại trên máy tính của người gửi.
+            </div>
+        </div>
+
+        <a href="index.html" class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-xl transition-colors shadow-lg shadow-blue-200 w-full">
+            Quay về Trang chủ
+        </a>
+    </div>
+
+    <!-- Thư viện Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyATUImtMbMPuhVh5rp5AfCjx-XysFkpry4",
+            authDomain: "chiaseanh-90255.firebaseapp.com",
+            projectId: "chiaseanh-90255",
+            storageBucket: "chiaseanh-90255.firebasestorage.app",
+            messagingSenderId: "1098994754786",
+            appId: "1:1098994754786:web:68b70076837d016519aabb",
+            measurementId: "G-14HXZXNWKZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetId = urlParams.get('share_id');
+
+            if (!targetId) {
+                showMockup("Liên kết không hợp lệ hoặc thiếu ID ảnh.");
+                return;
+            }
+
+            try {
+                const docSnap = await db.collection('images').doc(targetId).get();
+                if (docSnap.exists) {
+                    const foundImage = docSnap.data();
+
+                    if (foundImage.isDeleted) {
+                        showMockup("Rất tiếc, ảnh này đã bị chủ sở hữu xóa.");
+                        return;
+                    }
+
+                    // Nếu ảnh không phải public, có thể cần yêu cầu đăng nhập (tạm thời vẫn cho xem vì đã có link chia sẻ đích danh)
+                    
+                    document.getElementById('loading-text').classList.add('hidden');
+                    document.getElementById('photo-display').classList.remove('hidden');
+                    
+                    const imgEl = document.getElementById('shared-image');
+                    imgEl.src = foundImage.url;
+                    if (foundImage.currentFilter) {
+                        imgEl.style.filter = foundImage.currentFilter;
+                    }
+                    
+                    document.getElementById('shared-title').innerText = foundImage.name;
+                    document.getElementById('shared-meta').innerText = `Dung lượng: ${foundImage.size} • Đăng ngày: ${foundImage.uploadDate}`;
+
+                    if (foundImage.location) {
+                        document.getElementById('shared-location').innerText = foundImage.location;
+                        document.getElementById('shared-location-box').classList.remove('hidden');
+                    }
+
+                    if (foundImage.tag) {
+                        document.getElementById('shared-tag').innerText = foundImage.tag;
+                        document.getElementById('shared-tag').classList.remove('hidden');
+                    }
+
+                    if (foundImage.caption) {
+                        document.getElementById('shared-caption').innerText = `"${foundImage.caption}"`;
+                        document.getElementById('shared-caption').classList.remove('hidden');
+                    }
+                } else {
+                    showMockup("Ảnh không tồn tại hoặc link bị sai.");
+                }
+            } catch (error) {
+                console.error("Lỗi lấy dữ liệu Firestore:", error);
+                showMockup("Có lỗi kết nối đến máy chủ.");
+            }
+
+            function showMockup(msg) {
+                document.getElementById('loading-text').innerText = "Không thể tải ảnh.";
+                const notice = document.getElementById('mockup-notice');
+                notice.classList.remove('hidden');
+                notice.innerHTML = `
+                    <i class="fas fa-exclamation-triangle mt-0.5 text-lg"></i>
+                    <div>
+                        <strong>Lỗi:</strong><br>
+                        ${msg}
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
